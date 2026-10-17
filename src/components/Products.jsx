@@ -12,10 +12,13 @@ import {
   Sparkles,
   X,
   Check,
-  Printer
+  Printer,
+  LayoutGrid,
+  List,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
-import { INITIAL_CATEGORIES } from '../data/initialData';
-import { formatUSD, formatKHR, usdToRiel } from '../utils/helpers';
+import { formatKHR } from '../utils/helpers';
 
 export default function Products({
   products,
@@ -30,15 +33,90 @@ export default function Products({
 }) {
   const isKh = lang === 'km';
 
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' (Menu Cards) or 'table' (List Table)
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
   const [stockStatusFilter, setStockStatusFilter] = useState('all'); // all, low, out, instock
+
+  // Quick Inline Edit Price State
+  const [quickEditPriceId, setQuickEditPriceId] = useState(null);
+  const [quickEditPriceVal, setQuickEditPriceVal] = useState('');
+
+  const startQuickEditPrice = (product, e) => {
+    if (e) e.stopPropagation();
+    setQuickEditPriceId(product.id);
+    setQuickEditPriceVal(product.sellingPrice);
+  };
+
+  const handleSaveQuickPrice = (productId) => {
+    const newPrice = parseFloat(quickEditPriceVal);
+    if (!isNaN(newPrice) && newPrice >= 0) {
+      setProducts((prev) =>
+        prev.map((p) => (p.id === productId ? { ...p, sellingPrice: newPrice, updatedAt: new Date().toISOString() } : p))
+      );
+    }
+    setQuickEditPriceId(null);
+  };
 
   // Edit Modal State
   const [editingProduct, setEditingProduct] = useState(null);
 
   // Barcode Modal State
   const [barcodeProduct, setBarcodeProduct] = useState(null);
+
+  // Image File Upload supporting PNG and JPG/JPEG
+  const handleImageFile = (file, isEditing = false) => {
+    if (!file) return;
+
+    // Check PNG and JPG/JPEG formats
+    const isPng = file.type === 'image/png' || /\.png$/i.test(file.name);
+    const isJpg = file.type === 'image/jpeg' || file.type === 'image/jpg' || /\.(jpe?g)$/i.test(file.name);
+
+    if (!isPng && !isJpg) {
+      alert(isKh ? 'ប្រព័ន្ធទទួលស្គាល់តែប្រភេទរូបភាព PNG និង JPG ប៉ុណ្ណោះ!' : 'Only PNG and JPG/JPEG image formats are supported!');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 500;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Keep transparent background for PNG; use high-quality JPEG for JPG
+        const optimizedBase64 = isPng
+          ? canvas.toDataURL('image/png')
+          : canvas.toDataURL('image/jpeg', 0.88);
+
+        if (isEditing) {
+          setEditingProduct((prev) => ({ ...prev, image: optimizedBase64 }));
+        } else {
+          setNewProduct((prev) => ({ ...prev, image: optimizedBase64 }));
+        }
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Restock Input State
   const [restockQty, setRestockQty] = useState(10);
@@ -49,23 +127,18 @@ export default function Products({
   // New Product Form State
   const [newProduct, setNewProduct] = useState({
     nameKh: '',
-    nameEn: '',
-    category: 'beverages',
     barcode: '',
     costPrice: '',
     sellingPrice: '',
     stockQty: 10,
     minStock: 5,
     unit: 'កំប៉ុង',
-    supplier: '',
     emoji: '📦',
     image: ''
   });
 
   // Filter products
   const filteredProducts = products.filter((p) => {
-    const matchesCat = selectedCategory === 'all' || p.category === selectedCategory;
-
     let matchesStatus = true;
     if (stockStatusFilter === 'low') matchesStatus = p.stockQty > 0 && p.stockQty <= p.minStock;
     else if (stockStatusFilter === 'out') matchesStatus = p.stockQty <= 0;
@@ -75,18 +148,16 @@ export default function Products({
     const matchesSearch =
       !query ||
       p.nameKh?.toLowerCase().includes(query) ||
-      p.nameEn?.toLowerCase().includes(query) ||
       p.barcode?.toLowerCase().includes(query) ||
-      p.supplier?.toLowerCase().includes(query) ||
       p.id?.toLowerCase().includes(query);
 
-    return matchesCat && matchesStatus && matchesSearch;
+    return matchesStatus && matchesSearch;
   });
 
   // Delete product
   const handleDeleteProduct = (id) => {
     const target = products.find((p) => p.id === id);
-    const name = isKh ? target?.nameKh : target?.nameEn;
+    const name = target?.nameKh || '';
     if (window.confirm(isKh ? `តើអ្នកប្រាកដជាចង់លុបទំនិញ "${name}" នេះចេញពីប្រព័ន្ធមែនទេ?` : `Are you sure you want to delete "${name}"?`)) {
       setProducts((prev) => prev.filter((p) => p.id !== id));
     }
@@ -95,7 +166,7 @@ export default function Products({
   // Add Product Submit
   const handleCreateProduct = (e) => {
     e.preventDefault();
-    if (!newProduct.nameKh && !newProduct.nameEn) {
+    if (!newProduct.nameKh) {
       alert(isKh ? 'សូមបញ្ចូលឈ្មោះទំនិញ!' : 'Please enter product name!');
       return;
     }
@@ -107,15 +178,12 @@ export default function Products({
     const created = {
       id: `PRD-${Date.now().toString().slice(-5)}`,
       barcode: newProduct.barcode || `${Math.floor(100000000000 + Math.random() * 900000000000)}`,
-      nameKh: newProduct.nameKh || newProduct.nameEn,
-      nameEn: newProduct.nameEn || newProduct.nameKh,
-      category: newProduct.category,
+      nameKh: newProduct.nameKh,
       costPrice: cost,
       sellingPrice: sell,
       stockQty: qty,
       minStock: parseInt(newProduct.minStock, 10) || 5,
       unit: newProduct.unit || 'កញ្ចប់',
-      supplier: newProduct.supplier || 'ទូទៅ',
       emoji: newProduct.emoji || '📦',
       image: newProduct.image || '',
       updatedAt: new Date().toISOString()
@@ -124,7 +192,7 @@ export default function Products({
     setProducts((prev) => [created, ...prev]);
 
     // Record stock movement if qty > 0
-    if (qty > 0) {
+    if (onRecordStockMovement && qty > 0) {
       onRecordStockMovement({
         id: `MOV-${Date.now().toString().slice(-6)}`,
         date: new Date().toISOString(),
@@ -141,15 +209,12 @@ export default function Products({
     setIsAddModalOpen(false);
     setNewProduct({
       nameKh: '',
-      nameEn: '',
-      category: 'beverages',
       barcode: '',
       costPrice: '',
       sellingPrice: '',
       stockQty: 10,
       minStock: 5,
       unit: 'កំប៉ុង',
-      supplier: '',
       emoji: '📦',
       image: ''
     });
@@ -193,17 +258,19 @@ export default function Products({
     );
 
     // Record Movement
-    onRecordStockMovement({
-      id: `MOV-${Date.now().toString().slice(-6)}`,
-      date: new Date().toISOString(),
-      productId: restockItemTarget.id,
-      productName: isKh ? restockItemTarget.nameKh : restockItemTarget.nameEn,
-      type: 'RESTOCK_IN',
-      quantity: addQty,
-      costPrice: unitCost,
-      supplier: restockSupplier || restockItemTarget.supplier,
-      notes: restockNote || (isKh ? 'នាំចូលស្តុកបន្ថែម' : 'Restock shipment')
-    });
+    if (onRecordStockMovement) {
+      onRecordStockMovement({
+        id: `MOV-${Date.now().toString().slice(-6)}`,
+        date: new Date().toISOString(),
+        productId: restockItemTarget.id,
+        productName: isKh ? restockItemTarget.nameKh : restockItemTarget.nameEn,
+        type: 'RESTOCK_IN',
+        quantity: addQty,
+        costPrice: unitCost,
+        supplier: restockSupplier || restockItemTarget.supplier,
+        notes: restockNote || (isKh ? 'នាំចូលស្តុកបន្ថែម' : 'Restock shipment')
+      });
+    }
 
     setRestockItemTarget(null);
     setRestockQty(10);
@@ -219,7 +286,7 @@ export default function Products({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Top Banner Stats */}
+      {/* Top Banner: Menu ផលិតផល និងតម្លៃ */}
       <div
         className="card"
         style={{
@@ -228,44 +295,79 @@ export default function Products({
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: '16px',
-          background: 'var(--bg-card)'
+          background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-card-subtle) 100%)',
+          border: '1px solid var(--border-subtle)'
         }}
       >
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px' }}>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-              {isKh ? 'មុខទំនិញសរុប' : 'Total Items'}
-            </div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800 }}>{products.length}</div>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+            <span style={{ fontSize: '1.6rem' }}>📋</span>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 900, color: 'var(--text-main)' }}>
+              {isKh ? 'Menu ផលិតផល និងតម្លៃទំនិញ' : 'Product & Price Menu'}
+            </h2>
+            <span className="badge-tag primary" style={{ fontWeight: 800 }}>
+              {products.length} {isKh ? 'មុខទំនិញ' : 'Items'}
+            </span>
           </div>
-          <div style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '20px' }}>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-              {isKh ? 'បរិមាណស្តុកសរុប' : 'Total Stock Units'}
-            </div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800 }}>{totalUnits.toLocaleString()}</div>
-          </div>
-          <div style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '20px' }}>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-              {isKh ? 'ទុនស្តុកសរុប (Cost Asset)' : 'Total Cost Asset'}
-            </div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--primary)' }}>
-              {formatUSD(totalCostValue)}
-            </div>
-          </div>
-          <div style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '20px' }}>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-              {isKh ? 'តម្លៃលក់សរុប (Retail Value)' : 'Total Retail Value'}
-            </div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--success)' }}>
-              {formatUSD(totalRetailValue)}
-            </div>
-          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            {isKh
+              ? 'បញ្ជីមុខទំនិញ និងតម្លៃលក់គិតជាប្រាក់រៀល (៛) ងាយស្រួលមើល និងគ្រប់គ្រង'
+              : 'Complete product catalog and selling prices in Cambodian Riel (KHR ៛)'}
+          </p>
         </div>
 
-        <button className="btn btn-primary btn-lg" onClick={() => setIsAddModalOpen(true)}>
-          <Plus size={18} />
-          <span>{isKh ? 'បន្ថែមទំនិញថ្មី' : 'Add New Product'}</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* View mode toggle (Grid Menu Cards vs Table List) */}
+          <div style={{ display: 'flex', background: 'var(--bg-card-subtle)', padding: '3px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+            <button
+              type="button"
+              className={`control-btn ${viewMode === 'grid' ? 'active' : ''}`}
+              style={{
+                padding: '6px 12px',
+                background: viewMode === 'grid' ? 'var(--primary)' : 'transparent',
+                color: viewMode === 'grid' ? '#fff' : 'var(--text-main)',
+                border: 'none',
+                borderRadius: '4px',
+                fontWeight: 700,
+                fontSize: '0.82rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: 'pointer'
+              }}
+              onClick={() => setViewMode('grid')}
+            >
+              <LayoutGrid size={15} />
+              <span>{isKh ? 'កាត Menu' : 'Menu Cards'}</span>
+            </button>
+            <button
+              type="button"
+              className={`control-btn ${viewMode === 'table' ? 'active' : ''}`}
+              style={{
+                padding: '6px 12px',
+                background: viewMode === 'table' ? 'var(--primary)' : 'transparent',
+                color: viewMode === 'table' ? '#fff' : 'var(--text-main)',
+                border: 'none',
+                borderRadius: '4px',
+                fontWeight: 700,
+                fontSize: '0.82rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: 'pointer'
+              }}
+              onClick={() => setViewMode('table')}
+            >
+              <List size={15} />
+              <span>{isKh ? 'តារាងបញ្ជី' : 'Table List'}</span>
+            </button>
+          </div>
+
+          <button className="btn btn-primary btn-lg" onClick={() => setIsAddModalOpen(true)}>
+            <Plus size={18} />
+            <span>{isKh ? 'បន្ថែមទំនិញថ្មី' : 'Add New Product'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Toolbar */}
@@ -277,7 +379,7 @@ export default function Products({
             <input
               type="text"
               className="input-field"
-              placeholder={isKh ? 'ស្វែងរកតាមឈ្មោះ, Barcode, អ្នកផ្គត់ផ្គង់...' : 'Search product, barcode, supplier...'}
+              placeholder={isKh ? 'ស្វែងរកតាមឈ្មោះ ឬ Barcode...' : 'Search product name or barcode...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -307,22 +409,170 @@ export default function Products({
             </button>
           </div>
         </div>
-
-        {/* Categories Bar */}
-        <div className="pos-category-pills" style={{ marginTop: '14px', marginBottom: 0 }}>
-          {INITIAL_CATEGORIES.map((cat) => (
-            <button
-              key={cat.id}
-              className={`category-pill ${selectedCategory === cat.id ? 'active' : ''}`}
-              onClick={() => setSelectedCategory(cat.id)}
-            >
-              {isKh ? cat.nameKh : cat.nameEn}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Products Table */}
+      {/* GRID VIEW (Menu Cards) */}
+      {viewMode === 'grid' && (
+        <div>
+          {filteredProducts.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
+              🔍 {isKh ? 'រកមិនឃើញទំនិញដែលត្រូវនឹងការស្វែងរកទេ!' : 'No matching products found!'}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '16px' }}>
+              {filteredProducts.map((p) => {
+                const isZero = p.stockQty <= 0;
+                const isLow = p.stockQty > 0 && p.stockQty <= p.minStock;
+
+                return (
+                  <div
+                    key={p.id}
+                    className="card"
+                    style={{
+                      padding: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border-subtle)',
+                      background: 'var(--bg-card)',
+                      transition: 'all 0.2s ease',
+                      position: 'relative'
+                    }}
+                  >
+                    {/* Top: Stock Status */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '10px' }}>
+                      <span
+                        className={`badge-tag ${isZero ? 'danger' : isLow ? 'warning' : 'success'}`}
+                        style={{ fontSize: '0.72rem', fontWeight: 800 }}
+                      >
+                        {isZero ? (isKh ? 'អស់ស្តុក' : 'Out') : `${p.stockQty} ${p.unit}`}
+                      </span>
+                    </div>
+
+                    {/* Product Image / Emoji */}
+                    <div
+                      style={{
+                        width: '100%',
+                        height: '140px',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'var(--bg-card-subtle)',
+                        overflow: 'hidden',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '3.2rem',
+                        marginBottom: '12px'
+                      }}
+                    >
+                      {p.image ? (
+                        <img src={p.image} alt={p.nameKh} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span>{p.emoji || '📦'}</span>
+                      )}
+                    </div>
+
+                    {/* Product Name */}
+                    <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-main)', lineHeight: 1.3, marginBottom: p.barcode ? '4px' : '12px' }}>
+                      {p.nameKh}
+                    </div>
+                    {p.barcode && (
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        #{p.barcode}
+                      </div>
+                    )}
+
+                    {/* Price in Khmer Riel & Actions */}
+                    <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                          {isKh ? 'តម្លៃលក់ (ចុចដើម្បីកែ)' : 'Price (Click to edit)'}
+                        </div>
+                        {quickEditPriceId === p.id ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }} onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="number"
+                              step="100"
+                              autoFocus
+                              value={quickEditPriceVal}
+                              onChange={(e) => setQuickEditPriceVal(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveQuickPrice(p.id);
+                                if (e.key === 'Escape') setQuickEditPriceId(null);
+                              }}
+                              style={{
+                                width: '105px',
+                                padding: '4px 6px',
+                                fontSize: '1rem',
+                                fontWeight: 800,
+                                border: '2px solid var(--primary)',
+                                borderRadius: 'var(--radius-sm)',
+                                background: 'var(--bg-card)',
+                                color: 'var(--text-main)',
+                                outline: 'none'
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              style={{ padding: '4px 6px' }}
+                              onClick={() => handleSaveQuickPrice(p.id)}
+                              title={isKh ? 'រក្សាទុក' : 'Save'}
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ padding: '4px 6px' }}
+                              onClick={() => setQuickEditPriceId(null)}
+                              title={isKh ? 'បោះបង់' : 'Cancel'}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            onClick={(e) => startQuickEditPrice(p, e)}
+                            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                            title={isKh ? 'ចុចលើតម្លៃនេះដើម្បីកែប្រែភ្លាមៗ' : 'Click to quick edit price'}
+                          >
+                            <span style={{ fontSize: '1.35rem', fontWeight: 900, color: 'var(--primary)', lineHeight: 1.2 }}>
+                              {formatKHR(p.sellingPrice)}
+                            </span>
+                            <Edit size={13} style={{ color: 'var(--text-muted)', opacity: 0.7 }} />
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          className="control-btn"
+                          style={{ padding: '6px 8px' }}
+                          onClick={() => setEditingProduct({ ...p })}
+                          title={isKh ? 'កែប្រែតម្លៃ/ទំនិញ' : 'Edit item'}
+                        >
+                          <Edit size={15} />
+                        </button>
+                        <button
+                          className="control-btn"
+                          style={{ padding: '6px 8px', color: 'var(--danger)' }}
+                          onClick={() => handleDeleteProduct(p.id, p.nameKh)}
+                          title={isKh ? 'លុប' : 'Delete item'}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TABLE VIEW (List Table) */}
+      {viewMode === 'table' && (
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div className="table-responsive">
           <table className="data-table">
@@ -330,19 +580,17 @@ export default function Products({
               <tr>
                 <th>{isKh ? 'ទំនិញ' : 'Product'}</th>
                 <th>{isKh ? 'បាកូដ / SKU' : 'Barcode / SKU'}</th>
-                <th>{isKh ? 'ប្រភេទ' : 'Category'}</th>
                 <th>{isKh ? 'ថ្លៃដើម' : 'Cost Price'}</th>
                 <th>{isKh ? 'តម្លៃលក់' : 'Sell Price'}</th>
                 <th>{isKh ? 'ចំណេញ / ឯកតា' : 'Margin / Profit'}</th>
                 <th>{isKh ? 'ចំនួនក្នុងស្តុក' : 'Stock Qty'}</th>
-                <th>{isKh ? 'អ្នកផ្គត់ផ្គង់' : 'Supplier'}</th>
                 <th style={{ textAlign: 'right' }}>{isKh ? 'សកម្មភាព' : 'Actions'}</th>
               </tr>
             </thead>
             <tbody>
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan="9" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                  <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                     🔍 {isKh ? 'រកមិនឃើញទំនិញដែលត្រូវនឹងការស្វែងរកទេ!' : 'No matching products found!'}
                   </td>
                 </tr>
@@ -383,8 +631,7 @@ export default function Products({
                             )}
                           </div>
                           <div>
-                            <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{p.nameKh}</div>
-                            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{p.nameEn}</div>
+                            <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>{p.nameKh}</div>
                           </div>
                         </div>
                       </td>
@@ -408,28 +655,70 @@ export default function Products({
                         </div>
                       </td>
 
-                      {/* Category */}
-                      <td>
-                        <span className="badge-tag" style={{ background: 'var(--bg-card-subtle)', border: '1px solid var(--border-subtle)' }}>
-                          {p.category}
-                        </span>
-                      </td>
-
                       {/* Cost */}
-                      <td style={{ fontWeight: 600 }}>{formatUSD(p.costPrice)}</td>
+                      <td style={{ fontWeight: 600 }}>{formatKHR(p.costPrice)}</td>
 
-                      {/* Sell */}
-                      <td style={{ fontWeight: 800, color: 'var(--primary)' }}>
-                        {formatUSD(p.sellingPrice)}
-                        <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-                          {formatKHR(usdToRiel(p.sellingPrice, settings.exchangeRate))}
-                        </span>
+                      {/* Sell Price (Inline Quick Edit) */}
+                      <td>
+                        {quickEditPriceId === p.id ? (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <input
+                              type="number"
+                              step="100"
+                              autoFocus
+                              value={quickEditPriceVal}
+                              onChange={(e) => setQuickEditPriceVal(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveQuickPrice(p.id);
+                                if (e.key === 'Escape') setQuickEditPriceId(null);
+                              }}
+                              style={{
+                                width: '100px',
+                                padding: '4px 6px',
+                                fontSize: '0.9rem',
+                                fontWeight: 800,
+                                border: '2px solid var(--primary)',
+                                borderRadius: 'var(--radius-sm)',
+                                background: 'var(--bg-card)',
+                                color: 'var(--text-main)',
+                                outline: 'none'
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              style={{ padding: '3px 6px' }}
+                              onClick={() => handleSaveQuickPrice(p.id)}
+                              title={isKh ? 'រក្សាទុក' : 'Save'}
+                            >
+                              <Check size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{ padding: '3px 6px' }}
+                              onClick={() => setQuickEditPriceId(null)}
+                              title={isKh ? 'បោះបង់' : 'Cancel'}
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            onClick={(e) => startQuickEditPrice(p, e)}
+                            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 800, color: 'var(--primary)' }}
+                            title={isKh ? 'ចុចដើម្បីកែតម្លៃរហ័ស' : 'Click to quick edit price'}
+                          >
+                            <span>{formatKHR(p.sellingPrice)}</span>
+                            <Edit size={13} style={{ color: 'var(--text-muted)', opacity: 0.6 }} />
+                          </div>
+                        )}
                       </td>
 
                       {/* Profit */}
                       <td>
                         <span style={{ fontWeight: 700, color: 'var(--success)', fontSize: '0.85rem' }}>
-                          +{formatUSD(profit)}
+                          +{formatKHR(profit)}
                         </span>
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block' }}>
                           ({profitPercent}%)
@@ -449,11 +738,6 @@ export default function Products({
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                           {isKh ? `កម្រិតរោទិ៍:` : `Min:`} {p.minStock} {p.unit}
                         </div>
-                      </td>
-
-                      {/* Supplier */}
-                      <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                        {p.supplier || '-'}
                       </td>
 
                       {/* Actions */}
@@ -508,6 +792,7 @@ export default function Products({
           </table>
         </div>
       </div>
+      )}
 
       {/* Modal: Add New Product */}
       {isAddModalOpen && (
@@ -532,67 +817,37 @@ export default function Products({
               </div>
 
               <div className="modal-body">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                  <div className="input-group">
-                    <label className="input-label">{isKh ? 'ឈ្មោះទំនិញ (ភាសាខ្មែរ)*' : 'Product Name (Khmer)*'}</label>
-                    <input
-                      type="text"
-                      className="input-field"
-                      placeholder="ឧ. ទឹកក្រូច កូកា កូឡា"
-                      value={newProduct.nameKh}
-                      onChange={(e) => setNewProduct({ ...newProduct, nameKh: e.target.value })}
-                      required
-                    />
-                  </div>
+                <div className="input-group">
+                  <label className="input-label">{isKh ? 'ឈ្មោះទំនិញ*' : 'Product Name*'}</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="ឧ. ទឹកក្រូច កូកា កូឡា"
+                    value={newProduct.nameKh}
+                    onChange={(e) => setNewProduct({ ...newProduct, nameKh: e.target.value })}
+                    required
+                  />
+                </div>
 
-                  <div className="input-group">
-                    <label className="input-label">{isKh ? 'ឈ្មោះទំនិញ (English)' : 'Product Name (English)'}</label>
-                    <input
-                      type="text"
-                      className="input-field"
-                      placeholder="e.g. Coca Cola Can 330ml"
-                      value={newProduct.nameEn}
-                      onChange={(e) => setNewProduct({ ...newProduct, nameEn: e.target.value })}
-                    />
-                  </div>
+                <div className="input-group">
+                  <label className="input-label">{isKh ? 'លេខបាកូដ (Barcode)' : 'Barcode / SKU'}</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="88501234..."
+                    value={newProduct.barcode}
+                    onChange={(e) => setNewProduct({ ...newProduct, barcode: e.target.value })}
+                  />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                   <div className="input-group">
-                    <label className="input-label">{isKh ? 'ប្រភេទមុខទំនិញ' : 'Category'}</label>
-                    <select
-                      className="input-field"
-                      value={newProduct.category}
-                      onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
-                    >
-                      {INITIAL_CATEGORIES.filter((c) => c.id !== 'all').map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {isKh ? c.nameKh : c.nameEn}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="input-group">
-                    <label className="input-label">{isKh ? 'លេខបាកូដ (Barcode)' : 'Barcode / SKU'}</label>
-                    <input
-                      type="text"
-                      className="input-field"
-                      placeholder="88501234..."
-                      value={newProduct.barcode}
-                      onChange={(e) => setNewProduct({ ...newProduct, barcode: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                  <div className="input-group">
-                    <label className="input-label">{isKh ? 'ថ្លៃដើមទុន ($)' : 'Cost Price ($)'}</label>
+                    <label className="input-label">{isKh ? 'ថ្លៃដើមទុន (៛)' : 'Cost Price (KHR ៛)'}</label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="100"
                       className="input-field"
-                      placeholder="0.50"
+                      placeholder="1800"
                       value={newProduct.costPrice}
                       onChange={(e) => setNewProduct({ ...newProduct, costPrice: e.target.value })}
                       required
@@ -600,12 +855,12 @@ export default function Products({
                   </div>
 
                   <div className="input-group">
-                    <label className="input-label">{isKh ? 'តម្លៃលក់ចេញ ($)*' : 'Selling Price ($)*'}</label>
+                    <label className="input-label">{isKh ? 'តម្លៃលក់ចេញ (៛)*' : 'Selling Price (KHR ៛)*'}</label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="100"
                       className="input-field"
-                      placeholder="0.75"
+                      placeholder="2500"
                       value={newProduct.sellingPrice}
                       onChange={(e) => setNewProduct({ ...newProduct, sellingPrice: e.target.value })}
                       required
@@ -646,31 +901,106 @@ export default function Products({
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                  <div className="input-group">
-                    <label className="input-label">{isKh ? 'អ្នកផ្គត់ផ្គង់ (Supplier)' : 'Supplier'}</label>
-                    <input
-                      type="text"
-                      className="input-field"
-                      placeholder="ឧ. ដេប៉ូ ភ្នំពេញ"
-                      value={newProduct.supplier}
-                      onChange={(e) => setNewProduct({ ...newProduct, supplier: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="input-group">
-                    <label className="input-label">{isKh ? 'រូបភាពតំណាង (Image URL / Emoji)' : 'Image URL or Emoji'}</label>
-                    <input
-                      type="text"
-                      className="input-field"
-                      placeholder="https://... ឬ 🥤"
-                      value={newProduct.image || newProduct.emoji}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val.startsWith('http')) setNewProduct({ ...newProduct, image: val });
-                        else setNewProduct({ ...newProduct, emoji: val });
+                {/* Image Uploader & Preview (Add Modal) */}
+                <div className="input-group">
+                  <label className="input-label">
+                    {isKh ? 'រូបភាពទំនិញ (ជ្រើសរើសរូបពីកុំព្យូទ័រ/ទូរស័ព្ទ)' : 'Product Image (Upload Photo)'}
+                  </label>
+                  
+                  <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                    {/* Preview thumbnail */}
+                    <div
+                      style={{
+                        width: '84px',
+                        height: '84px',
+                        borderRadius: 'var(--radius-md)',
+                        border: '2px dashed var(--border-subtle)',
+                        background: 'var(--bg-card-subtle)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                        position: 'relative',
+                        flexShrink: 0
                       }}
-                    />
+                    >
+                      {newProduct.image ? (
+                        <>
+                          <img src={newProduct.image} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <button
+                            type="button"
+                            onClick={() => setNewProduct({ ...newProduct, image: '' })}
+                            style={{
+                              position: 'absolute',
+                              top: '3px',
+                              right: '3px',
+                              background: 'rgba(239, 68, 68, 0.85)',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '20px',
+                              height: '20px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer'
+                            }}
+                            title={isKh ? 'លុបរូបភាព' : 'Remove Image'}
+                          >
+                            <X size={12} />
+                          </button>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: '2.2rem' }}>{newProduct.emoji || '📦'}</span>
+                      )}
+                    </div>
+
+                    {/* Actions: Browse File & URL */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <label
+                          className="btn btn-secondary btn-sm"
+                          style={{
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontWeight: 700,
+                            padding: '8px 12px',
+                            background: 'var(--primary-light)',
+                            color: 'var(--primary)',
+                            border: '1px solid var(--primary)'
+                          }}
+                        >
+                          <Upload size={16} />
+                          <span>{isKh ? '📁 ជ្រើសរើសរូបភាព (PNG, JPG)' : '📁 Choose Image (PNG, JPG)'}</span>
+                          <input
+                            type="file"
+                            accept=".png, .jpg, .jpeg, image/png, image/jpeg"
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleImageFile(e.target.files[0], false);
+                              }
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
+
+                      <input
+                        type="text"
+                        className="input-field"
+                        style={{ fontSize: '0.82rem', padding: '6px 10px' }}
+                        placeholder={isKh ? 'ឬបិទភ្ជាប់តំណភ្ជាប់រូបភាព (https://...) ឬ Emoji' : 'Or paste Image URL (https://...) or Emoji'}
+                        value={newProduct.image && !newProduct.image.startsWith('data:') ? newProduct.image : newProduct.emoji}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val.startsWith('http')) setNewProduct({ ...newProduct, image: val });
+                          else setNewProduct({ ...newProduct, emoji: val });
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -712,44 +1042,33 @@ export default function Products({
               </div>
 
               <div className="modal-body">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                  <div className="input-group">
-                    <label className="input-label">{isKh ? 'ឈ្មោះ (ខ្មែរ)' : 'Name (Khmer)'}</label>
-                    <input
-                      type="text"
-                      className="input-field"
-                      value={editingProduct.nameKh}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, nameKh: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label className="input-label">{isKh ? 'ឈ្មោះ (English)' : 'Name (English)'}</label>
-                    <input
-                      type="text"
-                      className="input-field"
-                      value={editingProduct.nameEn}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, nameEn: e.target.value })}
-                    />
-                  </div>
+                <div className="input-group">
+                  <label className="input-label">{isKh ? 'ឈ្មោះទំនិញ*' : 'Product Name*'}</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={editingProduct.nameKh}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, nameKh: e.target.value })}
+                    required
+                  />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                   <div className="input-group">
-                    <label className="input-label">{isKh ? 'ថ្លៃដើម ($)' : 'Cost Price ($)'}</label>
+                    <label className="input-label">{isKh ? 'ថ្លៃដើម (៛)' : 'Cost Price (KHR ៛)'}</label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="100"
                       className="input-field"
                       value={editingProduct.costPrice}
                       onChange={(e) => setEditingProduct({ ...editingProduct, costPrice: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                   <div className="input-group">
-                    <label className="input-label">{isKh ? 'តម្លៃលក់ ($)' : 'Selling Price ($)'}</label>
+                    <label className="input-label">{isKh ? 'តម្លៃលក់ (៛)' : 'Selling Price (KHR ៛)'}</label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="100"
                       className="input-field"
                       value={editingProduct.sellingPrice}
                       onChange={(e) => setEditingProduct({ ...editingProduct, sellingPrice: parseFloat(e.target.value) || 0 })}
@@ -788,14 +1107,107 @@ export default function Products({
                   </div>
                 </div>
 
-                <div className="input-group">
-                  <label className="input-label">{isKh ? 'អ្នកផ្គត់ផ្គង់' : 'Supplier'}</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    value={editingProduct.supplier || ''}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, supplier: e.target.value })}
-                  />
+                {/* Image Uploader & Preview (Edit Modal) */}
+                <div className="input-group" style={{ marginTop: '14px' }}>
+                  <label className="input-label">
+                    {isKh ? 'រូបភាពទំនិញ (ជ្រើសរើសរូបពីកុំព្យូទ័រ/ទូរស័ព្ទ)' : 'Product Image (Upload Photo)'}
+                  </label>
+                  
+                  <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                    {/* Preview thumbnail */}
+                    <div
+                      style={{
+                        width: '84px',
+                        height: '84px',
+                        borderRadius: 'var(--radius-md)',
+                        border: '2px dashed var(--border-subtle)',
+                        background: 'var(--bg-card-subtle)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                        position: 'relative',
+                        flexShrink: 0
+                      }}
+                    >
+                      {editingProduct.image ? (
+                        <>
+                          <img src={editingProduct.image} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <button
+                            type="button"
+                            onClick={() => setEditingProduct({ ...editingProduct, image: '' })}
+                            style={{
+                              position: 'absolute',
+                              top: '3px',
+                              right: '3px',
+                              background: 'rgba(239, 68, 68, 0.85)',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '20px',
+                              height: '20px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer'
+                            }}
+                            title={isKh ? 'លុបរូបភាព' : 'Remove Image'}
+                          >
+                            <X size={12} />
+                          </button>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: '2.2rem' }}>{editingProduct.emoji || '📦'}</span>
+                      )}
+                    </div>
+
+                    {/* Actions: Browse File & URL */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <label
+                          className="btn btn-secondary btn-sm"
+                          style={{
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontWeight: 700,
+                            padding: '8px 12px',
+                            background: 'var(--primary-light)',
+                            color: 'var(--primary)',
+                            border: '1px solid var(--primary)'
+                          }}
+                        >
+                          <Upload size={16} />
+                          <span>{isKh ? '📁 ជ្រើសរើសរូបភាព (PNG, JPG)' : '📁 Choose Image (PNG, JPG)'}</span>
+                          <input
+                            type="file"
+                            accept=".png, .jpg, .jpeg, image/png, image/jpeg"
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleImageFile(e.target.files[0], true);
+                              }
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      </div>
+
+                      <input
+                        type="text"
+                        className="input-field"
+                        style={{ fontSize: '0.82rem', padding: '6px 10px' }}
+                        placeholder={isKh ? 'ឬបិទភ្ជាប់តំណភ្ជាប់រូបភាព (https://...) ឬ Emoji' : 'Or paste Image URL (https://...) or Emoji'}
+                        value={editingProduct.image && !editingProduct.image.startsWith('data:') ? editingProduct.image : editingProduct.emoji}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val.startsWith('http')) setEditingProduct({ ...editingProduct, image: val });
+                          else setEditingProduct({ ...editingProduct, emoji: val });
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -850,7 +1262,7 @@ export default function Products({
                 >
                   <div>
                     <div style={{ fontWeight: 800 }}>
-                      {isKh ? restockItemTarget.nameKh : restockItemTarget.nameEn}
+                      {restockItemTarget.nameKh}
                     </div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                       SKU: {restockItemTarget.barcode || restockItemTarget.id}
@@ -881,27 +1293,16 @@ export default function Products({
                   </div>
 
                   <div className="input-group">
-                    <label className="input-label">{isKh ? 'ថ្លៃដើមនាំចូលថ្មី ($)' : 'Cost Price per Unit ($)'}</label>
+                    <label className="input-label">{isKh ? 'ថ្លៃដើមនាំចូលថ្មី (៛)' : 'Cost Price per Unit (KHR ៛)'}</label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="100"
                       className="input-field"
                       placeholder={restockItemTarget.costPrice}
                       value={restockCost}
                       onChange={(e) => setRestockCost(e.target.value)}
                     />
                   </div>
-                </div>
-
-                <div className="input-group">
-                  <label className="input-label">{isKh ? 'អ្នកផ្គត់ផ្គង់ (Supplier)' : 'Supplier'}</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    value={restockSupplier}
-                    onChange={(e) => setRestockSupplier(e.target.value)}
-                    placeholder={restockItemTarget.supplier || 'ឧ. ក្រុមហ៊ុនចែកចាយ'}
-                  />
                 </div>
 
                 <div className="input-group">
@@ -970,7 +1371,7 @@ export default function Products({
                   {settings.storeNameKh}
                 </div>
                 <div style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: '8px' }}>
-                  {isKh ? barcodeProduct.nameKh : barcodeProduct.nameEn}
+                  {barcodeProduct.nameKh}
                 </div>
 
                 {/* SVG Mock Barcode */}
@@ -1024,11 +1425,8 @@ export default function Products({
                   </text>
                 </svg>
 
-                <div style={{ marginTop: '8px', fontSize: '1.25rem', fontWeight: 900, color: '#4f46e5' }}>
-                  {formatUSD(barcodeProduct.sellingPrice)}
-                  <span style={{ fontSize: '0.85rem', color: '#4b5563', fontWeight: 600, marginLeft: '6px' }}>
-                    / {formatKHR(usdToRiel(barcodeProduct.sellingPrice, settings.exchangeRate))}
-                  </span>
+                <div style={{ marginTop: '8px', fontSize: '1.4rem', fontWeight: 900, color: '#4f46e5' }}>
+                  {formatKHR(barcodeProduct.sellingPrice)}
                 </div>
               </div>
             </div>

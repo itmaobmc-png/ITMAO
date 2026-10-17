@@ -1,79 +1,46 @@
 import React from 'react';
-import { Moon, Sun, Globe, ShoppingCart, Menu, Store, DollarSign } from 'lucide-react';
-import { formatKHR } from '../utils/helpers';
+import { Moon, Sun, Globe, Store, Sparkles } from 'lucide-react';
 
 export default function Header({
   lang,
   setLang,
   theme,
   setTheme,
-  settings,
-  cartCount,
-  activeTab,
-  setActiveTab,
-  mobileOpen,
-  setMobileOpen
+  settings
 }) {
   const isKh = lang === 'km';
 
   return (
     <header className="topbar no-print">
       <div className="topbar-left">
-        <button
-          className="control-btn mobile-nav-toggle"
-          onClick={() => setMobileOpen(!mobileOpen)}
-          title="Toggle Menu"
-          aria-label="Toggle Navigation Menu"
-        >
-          <Menu size={20} />
-        </button>
-
-        <div className="page-title">
-          <Store className="text-primary" size={24} style={{ color: 'var(--primary)' }} />
-          <span>{isKh ? settings.storeNameKh : settings.storeNameEn}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="logo-badge" style={{ width: '38px', height: '38px' }}>
+            <Sparkles size={20} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: '1.05rem', lineHeight: 1.2 }}>
+              SmartStok
+            </div>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+              {isKh ? 'Menu ផលិតផល & តម្លៃ' : 'Products & Prices Menu'}
+            </div>
+          </div>
         </div>
 
-        <div className="badge-tag primary" style={{ display: 'none', lg: 'inline-flex' }}>
-          <span>1$ = {formatKHR(settings.exchangeRate)}</span>
+        <div className="page-title" style={{ marginLeft: '16px', paddingLeft: '16px', borderLeft: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
+          <Store className="text-primary" size={18} style={{ color: 'var(--primary)' }} />
+          <span>{isKh ? settings.storeNameKh : settings.storeNameEn}</span>
         </div>
       </div>
 
       <div className="topbar-right">
-        {/* Quick POS Cart Shortcut if not on POS tab */}
-        {activeTab !== 'pos' && (
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => setActiveTab('pos')}
-            style={{ position: 'relative' }}
-          >
-            <ShoppingCart size={16} />
-            <span>{isKh ? 'ប្រព័ន្ធលក់ POS' : 'Open POS'}</span>
-            {cartCount > 0 && (
-              <span
-                style={{
-                  background: 'var(--danger)',
-                  color: '#fff',
-                  borderRadius: '999px',
-                  padding: '1px 6px',
-                  fontSize: '0.72rem',
-                  fontWeight: 800,
-                  marginLeft: '4px'
-                }}
-              >
-                {cartCount}
-              </span>
-            )}
-          </button>
-        )}
-
-        {/* Currency Rate Indicator */}
+        {/* Currency Indicator - Pure Khmer Riel */}
         <div
           className="badge-tag"
-          style={{ background: 'var(--bg-card-subtle)', border: '1px solid var(--border-subtle)' }}
-          title={isKh ? 'អត្រាប្តូរប្រាក់បច្ចុប្បន្ន' : 'Current Exchange Rate'}
+          style={{ background: 'var(--bg-card-subtle)', border: '1px solid var(--border-subtle)', fontWeight: 700 }}
+          title={isKh ? 'ប្រព័ន្ធគិតជាប្រាក់រៀលសុទ្ធសាធ' : 'Khmer Riel Currency'}
         >
-          <DollarSign size={14} style={{ color: 'var(--success)' }} />
-          <span style={{ fontWeight: 700 }}>1$ = {settings.exchangeRate.toLocaleString()} ៛</span>
+          <span>🇰🇭 ប្រាក់រៀល (៛)</span>
         </div>
 
         {/* Language Switcher */}

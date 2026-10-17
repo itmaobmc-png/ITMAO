@@ -1,22 +1,20 @@
 // Helper utilities for SmartStok
 
-export const formatUSD = (amount) => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(amount || 0);
-};
-
 export const formatKHR = (amount) => {
   return new Intl.NumberFormat('km-KH', {
     maximumFractionDigits: 0
   }).format(Math.round(amount || 0)) + ' ៛';
 };
 
+// Kept for backward compatibility if called, but formats in Khmer Riel (៛)
+export const formatUSD = (amount) => {
+  return formatKHR(amount);
+};
+
+export const formatPrice = formatKHR;
+
 export const usdToRiel = (usdAmount, rate = 4100) => {
-  return Math.round((usdAmount || 0) * rate);
+  return Math.round((usdAmount || 0));
 };
 
 export const formatDate = (dateString, lang = 'km') => {
