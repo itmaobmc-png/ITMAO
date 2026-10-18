@@ -245,15 +245,17 @@ export const INITIAL_SALES = [
 ];
 
 export const INITIAL_SETTINGS = {
-  storeNameKh: 'ហាង ស្មាតស្តុក (SmartStok Express)',
-  storeNameEn: 'SmartStok Express Mart',
+  storeNameKh: 'ហាង សិរីពិដោរ',
+  storeNameEn: 'Serey Pidor Mart',
   phone: '012 345 678 / 098 765 432',
   address: 'ផ្ទះលេខ 128E, ផ្លូវ 271, សង្កាត់បឹងទំពុន, រាជធានីភ្នំពេញ',
   currency: 'KHR',
   currencySymbol: '៛',
   taxPercent: 0,
-  khqrMerchantName: 'SMART STOK MART',
-  khqrBakongId: 'smartstok@acleda',
+  khqrMerchantName: 'PIDOR SHOP',
+  khqrBakongId: 'pidorshop@acleda',
   receiptFooterKh: 'សូមអរគុណសម្រាប់ការគាំទ្រ! សូមអញ្ជើញមកម្តងទៀត!',
   receiptFooterEn: 'Thank you for shopping with us! Please come again!'
 };
+
+

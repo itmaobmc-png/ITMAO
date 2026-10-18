@@ -9,7 +9,7 @@ function createWindow() {
     height: 868,
     minWidth: 1024,
     minHeight: 700,
-    title: 'Smart Stock - ប្រព័ន្ធគ្រប់គ្រងស្តុក និងលក់ (POS)',
+    title: 'ប្រព័ន្ធគ្រប់គ្រងស្តុក និងលក់ (POS)',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -18,7 +18,7 @@ function createWindow() {
     },
   });
 
-  const devUrl = process.env.ELECTRON_START_URL || 'http://localhost:5173';
+  const devUrl = process.env.ELECTRON_START_URL || 'http://127.0.0.1:5173';
   const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 
   if (isDev) {

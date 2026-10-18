@@ -2,21 +2,18 @@ import React, { useState } from 'react';
 import {
   Search,
   Plus,
-  Boxes,
-  AlertTriangle,
   Edit,
   Trash2,
   ArrowDownToLine,
   Barcode,
-  Layers,
-  Sparkles,
   X,
   Check,
   Printer,
   LayoutGrid,
   List,
   Upload,
-  Image as ImageIcon
+  Lock,
+  ShoppingBag
 } from 'lucide-react';
 import { formatKHR } from '../utils/helpers';
 
@@ -29,13 +26,20 @@ export default function Products({
   restockItemTarget,
   setRestockItemTarget,
   isAddModalOpen,
-  setIsAddModalOpen
+  setIsAddModalOpen,
+  onAddToCart
 }) {
   const isKh = lang === 'km';
 
+  // Anyone can edit prices and products freely
+  const canEditPrice = true;
+  const canAddProduct = true;
+  const canEditProduct = true;
+  const canDeleteProduct = true;
+  const canViewCostPrice = true;
+
   const [viewMode, setViewMode] = useState('grid'); // 'grid' (Menu Cards) or 'table' (List Table)
   const [searchQuery, setSearchQuery] = useState('');
-  const [stockStatusFilter, setStockStatusFilter] = useState('all'); // all, low, out, instock
 
   // Quick Inline Edit Price State
   const [quickEditPriceId, setQuickEditPriceId] = useState(null);
@@ -137,25 +141,23 @@ export default function Products({
     image: ''
   });
 
-  // Filter products
+  // Filter products by search query
   const filteredProducts = products.filter((p) => {
-    let matchesStatus = true;
-    if (stockStatusFilter === 'low') matchesStatus = p.stockQty > 0 && p.stockQty <= p.minStock;
-    else if (stockStatusFilter === 'out') matchesStatus = p.stockQty <= 0;
-    else if (stockStatusFilter === 'instock') matchesStatus = p.stockQty > p.minStock;
-
     const query = searchQuery.toLowerCase().trim();
-    const matchesSearch =
+    return (
       !query ||
       p.nameKh?.toLowerCase().includes(query) ||
       p.barcode?.toLowerCase().includes(query) ||
-      p.id?.toLowerCase().includes(query);
-
-    return matchesStatus && matchesSearch;
+      p.id?.toLowerCase().includes(query)
+    );
   });
 
   // Delete product
   const handleDeleteProduct = (id) => {
+    if (!canDeleteProduct) {
+      alert(isKh ? '🔒 គណនីបុគ្គលិកពុំមានសិទ្ធិលុបទំនិញទេ! សូមទាក់ទង Admin។' : '🔒 Staff account cannot delete items!');
+      return;
+    }
     const target = products.find((p) => p.id === id);
     const name = target?.nameKh || '';
     if (window.confirm(isKh ? `តើអ្នកប្រាកដជាចង់លុបទំនិញ "${name}" នេះចេញពីប្រព័ន្ធមែនទេ?` : `Are you sure you want to delete "${name}"?`)) {
@@ -166,6 +168,10 @@ export default function Products({
   // Add Product Submit
   const handleCreateProduct = (e) => {
     e.preventDefault();
+    if (!canAddProduct) {
+      alert(isKh ? '🔒 គណនីបុគ្គលិកពុំមានសិទ្ធិបន្ថែមទំនិញថ្មីទេ! សូមទាក់ទង Admin។' : '🔒 Staff account cannot add items!');
+      return;
+    }
     if (!newProduct.nameKh) {
       alert(isKh ? 'សូមបញ្ចូលឈ្មោះទំនិញ!' : 'Please enter product name!');
       return;
@@ -224,7 +230,20 @@ export default function Products({
   const handleUpdateProduct = (e) => {
     e.preventDefault();
     setProducts((prev) =>
-      prev.map((p) => (p.id === editingProduct.id ? { ...editingProduct, updatedAt: new Date().toISOString() } : p))
+      prev.map((p) => {
+        if (p.id === editingProduct.id) {
+          const finalSellingPrice = canEditPrice ? editingProduct.sellingPrice : p.sellingPrice;
+          const finalCostPrice = canViewCostPrice ? editingProduct.costPrice : p.costPrice;
+          return {
+            ...p,
+            ...(canEditProduct ? editingProduct : {}),
+            sellingPrice: finalSellingPrice,
+            costPrice: finalCostPrice,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return p;
+      })
     );
     setEditingProduct(null);
   };
@@ -338,7 +357,7 @@ export default function Products({
               onClick={() => setViewMode('grid')}
             >
               <LayoutGrid size={15} />
-              <span>{isKh ? 'កាត Menu' : 'Menu Cards'}</span>
+              <span>{isKh ? 'ផលិតផល' : 'Products'}</span>
             </button>
             <button
               type="button"
@@ -363,51 +382,28 @@ export default function Products({
             </button>
           </div>
 
-          <button className="btn btn-primary btn-lg" onClick={() => setIsAddModalOpen(true)}>
+          {/* Add Product Button */}
+          <button
+            className="btn btn-primary btn-lg"
+            onClick={() => setIsAddModalOpen(true)}
+          >
             <Plus size={18} />
             <span>{isKh ? 'បន្ថែមទំនិញថ្មី' : 'Add New Product'}</span>
           </button>
         </div>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="card" style={{ padding: '16px 20px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center', justifyContent: 'space-between' }}>
-          {/* Search Box */}
-          <div className="search-box">
-            <Search className="search-icon" size={18} />
-            <input
-              type="text"
-              className="input-field"
-              placeholder={isKh ? 'ស្វែងរកតាមឈ្មោះ ឬ Barcode...' : 'Search product name or barcode...'}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-
-          {/* Status filters */}
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              className={`category-pill ${stockStatusFilter === 'all' ? 'active' : ''}`}
-              onClick={() => setStockStatusFilter('all')}
-            >
-              {isKh ? 'ទាំងអស់' : 'All'} ({products.length})
-            </button>
-            <button
-              className={`category-pill ${stockStatusFilter === 'low' ? 'active' : ''}`}
-              onClick={() => setStockStatusFilter('low')}
-            >
-              ⚠️ {isKh ? 'ជិតអស់ស្តុក' : 'Low Stock'} (
-              {products.filter((p) => p.stockQty > 0 && p.stockQty <= p.minStock).length})
-            </button>
-            <button
-              className={`category-pill ${stockStatusFilter === 'out' ? 'active' : ''}`}
-              onClick={() => setStockStatusFilter('out')}
-            >
-              🛑 {isKh ? 'អស់ពីស្តុក' : 'Out of Stock'} (
-              {products.filter((p) => p.stockQty <= 0).length})
-            </button>
-          </div>
+      {/* Search Toolbar */}
+      <div className="card" style={{ padding: '14px 20px' }}>
+        <div className="search-box" style={{ maxWidth: '480px', width: '100%' }}>
+          <Search className="search-icon" size={18} />
+          <input
+            type="text"
+            className="input-field"
+            placeholder={isKh ? 'ស្វែងរកតាមឈ្មោះទំនិញ ឬ Barcode...' : 'Search product name or barcode...'}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
       </div>
 
@@ -485,7 +481,9 @@ export default function Products({
                     <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                          {isKh ? 'តម្លៃលក់ (ចុចដើម្បីកែ)' : 'Price (Click to edit)'}
+                          {canEditPrice
+                            ? (isKh ? 'តម្លៃលក់ (ចុចដើម្បីកែ)' : 'Price (Click to edit)')
+                            : (isKh ? 'តម្លៃលក់ 🔒' : 'Price 🔒')}
                         </div>
                         {quickEditPriceId === p.id ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }} onClick={(e) => e.stopPropagation()}>
@@ -533,36 +531,72 @@ export default function Products({
                         ) : (
                           <div
                             onClick={(e) => startQuickEditPrice(p, e)}
-                            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                            title={isKh ? 'ចុចលើតម្លៃនេះដើម្បីកែប្រែភ្លាមៗ' : 'Click to quick edit price'}
+                            style={{
+                              cursor: canEditPrice ? 'pointer' : 'default',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                            title={canEditPrice ? (isKh ? 'ចុចលើតម្លៃនេះដើម្បីកែប្រែភ្លាមៗ' : 'Click to quick edit price') : (isKh ? '🔒 គ្មានសិទ្ធិកែតម្លៃទេ (ចុចមើលព័ត៌មាន)' : 'Price edit locked')}
                           >
                             <span style={{ fontSize: '1.35rem', fontWeight: 900, color: 'var(--primary)', lineHeight: 1.2 }}>
                               {formatKHR(p.sellingPrice)}
                             </span>
-                            <Edit size={13} style={{ color: 'var(--text-muted)', opacity: 0.7 }} />
+                            {canEditPrice ? (
+                              <Edit size={13} style={{ color: 'var(--text-muted)', opacity: 0.7 }} />
+                            ) : (
+                              <Lock size={12} style={{ color: 'var(--text-muted)', opacity: 0.5 }} />
+                            )}
                           </div>
                         )}
                       </div>
 
                       <div style={{ display: 'flex', gap: '6px' }}>
-                        <button
-                          className="control-btn"
-                          style={{ padding: '6px 8px' }}
-                          onClick={() => setEditingProduct({ ...p })}
-                          title={isKh ? 'កែប្រែតម្លៃ/ទំនិញ' : 'Edit item'}
-                        >
-                          <Edit size={15} />
-                        </button>
-                        <button
-                          className="control-btn"
-                          style={{ padding: '6px 8px', color: 'var(--danger)' }}
-                          onClick={() => handleDeleteProduct(p.id, p.nameKh)}
-                          title={isKh ? 'លុប' : 'Delete item'}
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        {(canEditProduct || canEditPrice) && (
+                          <button
+                            className="control-btn"
+                            style={{ padding: '6px 8px' }}
+                            onClick={() => setEditingProduct({ ...p })}
+                            title={isKh ? 'កែប្រែតម្លៃ/ទំនិញ' : 'Edit item'}
+                          >
+                            <Edit size={15} />
+                          </button>
+                        )}
+                        {canDeleteProduct && (
+                          <button
+                            className="control-btn"
+                            style={{ padding: '6px 8px', color: 'var(--danger)' }}
+                            onClick={() => handleDeleteProduct(p.id, p.nameKh)}
+                            title={isKh ? 'លុប' : 'Delete item'}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </div>
+
+                    {/* Sell Out / Add to Cart Action Button */}
+                    <button
+                      type="button"
+                      className="btn btn-success"
+                      disabled={isZero}
+                      onClick={() => onAddToCart && onAddToCart(p)}
+                      style={{
+                        width: '100%',
+                        marginTop: '10px',
+                        padding: '9px 12px',
+                        fontWeight: 800,
+                        fontSize: '0.86rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        borderRadius: 'var(--radius-sm)'
+                      }}
+                    >
+                      <ShoppingBag size={15} />
+                      <span>{isZero ? (isKh ? 'អស់ពីស្តុក' : 'Out of stock') : (isKh ? '+ ដាក់លក់ចេញ' : '+ Add to Sale')}</span>
+                    </button>
                   </div>
                 );
               })}
@@ -656,7 +690,9 @@ export default function Products({
                       </td>
 
                       {/* Cost */}
-                      <td style={{ fontWeight: 600 }}>{formatKHR(p.costPrice)}</td>
+                      <td style={{ fontWeight: 600 }}>
+                        {canViewCostPrice ? formatKHR(p.costPrice) : <span style={{ color: 'var(--text-muted)' }}>•••• ៛</span>}
+                      </td>
 
                       {/* Sell Price (Inline Quick Edit) */}
                       <td>
@@ -706,23 +742,40 @@ export default function Products({
                         ) : (
                           <div
                             onClick={(e) => startQuickEditPrice(p, e)}
-                            style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 800, color: 'var(--primary)' }}
-                            title={isKh ? 'ចុចដើម្បីកែតម្លៃរហ័ស' : 'Click to quick edit price'}
+                            style={{
+                              cursor: canEditPrice ? 'pointer' : 'default',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontWeight: 800,
+                              color: 'var(--primary)'
+                            }}
+                            title={canEditPrice ? (isKh ? 'ចុចដើម្បីកែតម្លៃរហ័ស' : 'Click to quick edit price') : (isKh ? '🔒 គ្មានសិទ្ធិកែតម្លៃទេ' : 'Price edit locked')}
                           >
                             <span>{formatKHR(p.sellingPrice)}</span>
-                            <Edit size={13} style={{ color: 'var(--text-muted)', opacity: 0.6 }} />
+                            {canEditPrice ? (
+                              <Edit size={13} style={{ color: 'var(--text-muted)', opacity: 0.6 }} />
+                            ) : (
+                              <Lock size={12} style={{ color: 'var(--text-muted)', opacity: 0.5 }} />
+                            )}
                           </div>
                         )}
                       </td>
 
                       {/* Profit */}
                       <td>
-                        <span style={{ fontWeight: 700, color: 'var(--success)', fontSize: '0.85rem' }}>
-                          +{formatKHR(profit)}
-                        </span>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block' }}>
-                          ({profitPercent}%)
-                        </span>
+                        {canViewCostPrice ? (
+                          <>
+                            <span style={{ fontWeight: 700, color: 'var(--success)', fontSize: '0.85rem' }}>
+                              +{formatKHR(profit)}
+                            </span>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block' }}>
+                              ({profitPercent}%)
+                            </span>
+                          </>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>••••</span>
+                        )}
                       </td>
 
                       {/* Stock Qty */}
@@ -743,6 +796,17 @@ export default function Products({
                       {/* Actions */}
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: '6px' }}>
+                          <button
+                            className="btn btn-success btn-sm"
+                            disabled={isZero}
+                            onClick={() => onAddToCart && onAddToCart(p)}
+                            title={isKh ? 'ដាក់លក់ចេញ' : 'Add to sale'}
+                            style={{ padding: '6px 10px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                          >
+                            <ShoppingBag size={14} />
+                            <span>{isKh ? 'លក់ចេញ' : 'Sell'}</span>
+                          </button>
+
                           <button
                             className="btn btn-primary btn-sm"
                             onClick={() => {
@@ -765,23 +829,27 @@ export default function Products({
                             <Barcode size={15} />
                           </button>
 
-                          <button
-                            className="control-btn"
-                            style={{ padding: '6px 8px' }}
-                            onClick={() => setEditingProduct({ ...p })}
-                            title={isKh ? 'កែសម្រួល' : 'Edit'}
-                          >
-                            <Edit size={15} />
-                          </button>
+                          {(canEditProduct || canEditPrice) && (
+                            <button
+                              className="control-btn"
+                              style={{ padding: '6px 8px' }}
+                              onClick={() => setEditingProduct({ ...p })}
+                              title={isKh ? 'កែសម្រួល' : 'Edit'}
+                            >
+                              <Edit size={15} />
+                            </button>
+                          )}
 
-                          <button
-                            className="control-btn"
-                            style={{ padding: '6px 8px', color: 'var(--danger)' }}
-                            onClick={() => handleDeleteProduct(p.id)}
-                            title={isKh ? 'លុប' : 'Delete'}
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {canDeleteProduct && (
+                            <button
+                              className="control-btn"
+                              style={{ padding: '6px 8px', color: 'var(--danger)' }}
+                              onClick={() => handleDeleteProduct(p.id)}
+                              title={isKh ? 'លុប' : 'Delete'}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1055,21 +1123,41 @@ export default function Products({
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                   <div className="input-group">
-                    <label className="input-label">{isKh ? 'ថ្លៃដើម (៛)' : 'Cost Price (KHR ៛)'}</label>
+                    <label className="input-label">
+                      <span>{isKh ? 'ថ្លៃដើម (៛)' : 'Cost Price (KHR ៛)'}</span>
+                      {!canViewCostPrice && (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                          🔒 {isKh ? 'បានបិទបាំង' : 'Hidden'}
+                        </span>
+                      )}
+                    </label>
                     <input
-                      type="number"
+                      type={canViewCostPrice ? 'number' : 'text'}
                       step="100"
                       className="input-field"
-                      value={editingProduct.costPrice}
+                      disabled={!canViewCostPrice}
+                      value={canViewCostPrice ? editingProduct.costPrice : '••••••'}
                       onChange={(e) => setEditingProduct({ ...editingProduct, costPrice: parseFloat(e.target.value) || 0 })}
                     />
                   </div>
                   <div className="input-group">
-                    <label className="input-label">{isKh ? 'តម្លៃលក់ (៛)' : 'Selling Price (KHR ៛)'}</label>
+                    <label className="input-label">
+                      <span>{isKh ? 'តម្លៃលក់ (៛)*' : 'Selling Price (KHR ៛)*'}</span>
+                      {!canEditPrice && (
+                        <span style={{ color: 'var(--danger)', fontSize: '0.72rem', fontWeight: 700 }}>
+                          🔒 {isKh ? 'គ្មានសិទ្ធិកែ' : 'Locked'}
+                        </span>
+                      )}
+                    </label>
                     <input
                       type="number"
                       step="100"
                       className="input-field"
+                      disabled={!canEditPrice}
+                      style={{
+                        background: !canEditPrice ? 'var(--bg-hover)' : undefined,
+                        cursor: !canEditPrice ? 'not-allowed' : undefined
+                      }}
                       value={editingProduct.sellingPrice}
                       onChange={(e) => setEditingProduct({ ...editingProduct, sellingPrice: parseFloat(e.target.value) || 0 })}
                       required
